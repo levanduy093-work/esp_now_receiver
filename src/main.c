@@ -3,9 +3,11 @@
 #include "nvs_flash.h"
 #include "esp_wifi.h"
 #include "esp_now.h"
+#include "esp_sleep.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+// Cấu trúc dữ liệu nhận
 typedef struct {
     int node_id;
     float temperature;
@@ -16,6 +18,17 @@ typedef struct {
 sensor_data_t node_data[9];
 int node_count = 0;
 
+// Giả lập gửi dữ liệu lên Firebase
+void send_to_firebase(sensor_data_t *data, int count) {
+    printf("Gửi dữ liệu lên Firebase:\n");
+    for (int i = 0; i < count; i++) {
+        printf("Node %d: Temp=%.2f°C, Humi=%.2f%%, Time=%s\n",
+               data[i].node_id, data[i].temperature, data[i].humidity, data[i].timestamp);
+    }
+    printf("Hoàn tất gửi dữ liệu lên Firebase.\n");
+}
+
+// Cập nhật dữ liệu node
 void update_node_data(sensor_data_t *data) {
     for (int i = 0; i < node_count; i++) {
         if (node_data[i].node_id == data->node_id) {
@@ -28,16 +41,7 @@ void update_node_data(sensor_data_t *data) {
     }
 }
 
-void print_node_data() {
-    printf("------ Dữ liệu từ các node ------\n");
-    for (int i = 0; i < node_count; i++) {
-        printf("Node %d: Nhiệt độ=%.2f°C, Độ ẩm=%.2f%%, Thời gian=%s\n",
-               node_data[i].node_id, node_data[i].temperature,
-               node_data[i].humidity, node_data[i].timestamp);
-    }
-    printf("---------------------------------\n");
-}
-
+// Callback khi nhận dữ liệu
 void on_data_recv(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
     if (len == sizeof(sensor_data_t)) {
         sensor_data_t received_data;
@@ -46,6 +50,14 @@ void on_data_recv(const esp_now_recv_info_t *recv_info, const uint8_t *data, int
     }
 }
 
+// Deep Sleep sau khi gửi xong dữ liệu
+void enter_deep_sleep() {
+    printf("Chuyển sang chế độ Deep Sleep. Sẽ đánh thức sau 5 phút.\n");
+    esp_sleep_enable_timer_wakeup(300000000); // Đánh thức sau 5 phút (5 * 60 * 1000000 us)
+    esp_deep_sleep_start();
+}
+
+// Khởi tạo NVS
 void initialize_nvs() {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -56,6 +68,7 @@ void initialize_nvs() {
     printf("Khởi tạo NVS thành công.\n");
 }
 
+// Khởi tạo WiFi
 void initialize_wifi() {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -64,6 +77,7 @@ void initialize_wifi() {
     printf("Khởi tạo WiFi ở chế độ Station thành công.\n");
 }
 
+// Main Task
 void app_main() {
     initialize_nvs();
     initialize_wifi();
@@ -73,9 +87,10 @@ void app_main() {
     while (1) {
         if (node_count == 9) {
             printf("Đã nhận đủ dữ liệu từ tất cả các node.\n");
-            print_node_data();
+            send_to_firebase(node_data, node_count); // Gửi dữ liệu lên Firebase
             node_count = 0;
+            enter_deep_sleep(); // Chuyển sang Deep Sleep
         }
-        vTaskDelay(pdMS_TO_TICKS(60000)); // Kiểm tra mỗi phút
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Chờ thêm dữ liệu
     }
 }
