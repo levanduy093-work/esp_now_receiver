@@ -12,21 +12,10 @@ typedef struct {
     int node_id;
     float temperature;
     float humidity;
-    char timestamp[20];
 } sensor_data_t;
 
 sensor_data_t node_data[9];
 int node_count = 0;
-
-// Giả lập gửi dữ liệu lên Firebase
-void send_to_firebase(sensor_data_t *data, int count) {
-    printf("Gửi dữ liệu lên Firebase:\n");
-    for (int i = 0; i < count; i++) {
-        printf("Node %d: Temp=%.2f°C, Humi=%.2f%%, Time=%s\n",
-               data[i].node_id, data[i].temperature, data[i].humidity, data[i].timestamp);
-    }
-    printf("Hoàn tất gửi dữ liệu lên Firebase.\n");
-}
 
 // Cập nhật dữ liệu node
 void update_node_data(sensor_data_t *data) {
@@ -50,10 +39,10 @@ void on_data_recv(const esp_now_recv_info_t *recv_info, const uint8_t *data, int
     }
 }
 
-// Deep Sleep sau khi gửi xong dữ liệu
+// Deep Sleep sau khi nhận đủ dữ liệu
 void enter_deep_sleep() {
-    printf("Chuyển sang chế độ Deep Sleep. Sẽ đánh thức sau 5 phút.\n");
-    esp_sleep_enable_timer_wakeup(300000000); // Đánh thức sau 5 phút (5 * 60 * 1000000 us)
+    printf("Chuyển sang chế độ Deep Sleep. Sẽ đánh thức sau 2 phút.\n");
+    esp_sleep_enable_timer_wakeup(120000000); // Đánh thức sau 2 phút (2 * 60 * 1000000 us)
     esp_deep_sleep_start();
 }
 
@@ -77,6 +66,17 @@ void initialize_wifi() {
     printf("Khởi tạo WiFi ở chế độ Station thành công.\n");
 }
 
+// In dữ liệu theo format CSV
+void print_data_as_csv() {
+    printf("node_id,temperature,humidity\n");
+    for (int i = 0; i < node_count; i++) {
+        printf("%d,%.2f,%.2f\n",
+               node_data[i].node_id,
+               node_data[i].temperature,
+               node_data[i].humidity);
+    }
+}
+
 // Main Task
 void app_main() {
     initialize_nvs();
@@ -86,8 +86,8 @@ void app_main() {
 
     while (1) {
         if (node_count == 9) {
-            printf("Đã nhận đủ dữ liệu từ tất cả các node.\n");
-            send_to_firebase(node_data, node_count); // Gửi dữ liệu lên Firebase
+            printf("Đã nhận đủ dữ liệu từ tất cả các node:\n");
+            print_data_as_csv(); // In dữ liệu theo format CSV
             node_count = 0;
             enter_deep_sleep(); // Chuyển sang Deep Sleep
         }
